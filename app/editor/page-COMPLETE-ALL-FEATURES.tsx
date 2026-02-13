@@ -1302,7 +1302,7 @@ export default function EditorPage() {
                   min="-100"
                   max="100"
                   value={saturation}
-                  onChange={(e) => setSaturation(Number(e.target.value))}
+                  onChange={(e) => setSaturation(e.target.value))}
                   style={{ width: "100%" }}
                 />
               </div>
