@@ -24,10 +24,11 @@ export default function RSVPWidget({ eventId, eventName }: RSVPWidgetProps) {
     setShowForm(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // ✅ avoid React namespace typing issues
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    if (!response || !name) {
+
+    if (!response || !name.trim()) {
       alert("Please provide your name");
       return;
     }
@@ -35,40 +36,47 @@ export default function RSVPWidget({ eventId, eventName }: RSVPWidgetProps) {
     setSubmitting(true);
 
     try {
+      const guestsNum =
+        response === "blessings"
+          ? 0
+          : Math.max(1, Number.parseInt(guests || "1", 10) || 1);
+
       const res = await fetch("/api/rsvp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           event_id: eventId,
+          event_name: eventName, // ✅ now used
           response,
-          status: response, // confirmed, maybe, or blessings
-          name,
-          email,
-          phone,
-          guests: parseInt(guests) || 1,
+          status: response,
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          guests: guestsNum,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to submit RSVP");
+        throw new Error(data?.error || "Failed to submit RSVP");
       }
 
       setSubmitted(true);
-      
-      // Track RSVP submission
-      await fetch("/api/rsvp-analytics", {
+
+      // ✅ best-effort analytics (don’t break success UX)
+      fetch("/api/rsvp-analytics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           event_id: eventId,
           action: `rsvp_${response}`,
         }),
-      });
-
-    } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      }).catch(() => {});
+    } catch (error: unknown) {
+      const msg =
+        error instanceof Error ? error.message : "Unknown error submitting RSVP";
+      alert(`Error: ${msg}`);
     } finally {
       setSubmitting(false);
     }
@@ -81,14 +89,14 @@ export default function RSVPWidget({ eventId, eventName }: RSVPWidgetProps) {
         <h3 style={styles.confirmationTitle}>
           {response === "blessings" ? "Blessings Sent!" : "RSVP Confirmed!"}
         </h3>
-        <p style={styles.confirmationText}>
-          Thank you, {name}!
-        </p>
+        <p style={styles.confirmationText}>Thank you, {name}!</p>
         <div style={styles.confirmationBadge}>
           <p style={styles.confirmationBadgeText}>
-            {response === "confirmed" ? "I'll be there!" : 
-             response === "maybe" ? "Maybe" : 
-             "Sending blessings"}
+            {response === "confirmed"
+              ? "I'll be there!"
+              : response === "maybe"
+              ? "Maybe"
+              : "Sending blessings"}
           </p>
         </div>
       </div>
@@ -100,31 +108,19 @@ export default function RSVPWidget({ eventId, eventName }: RSVPWidgetProps) {
       {!showForm ? (
         <>
           <h3 style={styles.question}>Will you join us?</h3>
-          
+
           <div style={styles.buttonGrid}>
-            {/* I'll be there! button */}
-            <button
-              onClick={() => handleResponseClick("confirmed")}
-              style={styles.buttonConfirmed}
-            >
+            <button onClick={() => handleResponseClick("confirmed")} style={styles.buttonConfirmed}>
               <div style={styles.buttonIcon}>🪔</div>
               <div style={styles.buttonText}>I'll be there!</div>
             </button>
 
-            {/* Maybe button */}
-            <button
-              onClick={() => handleResponseClick("maybe")}
-              style={styles.buttonMaybe}
-            >
+            <button onClick={() => handleResponseClick("maybe")} style={styles.buttonMaybe}>
               <div style={styles.buttonIcon}>🤔</div>
               <div style={styles.buttonText}>Maybe</div>
             </button>
 
-            {/* Send blessings button */}
-            <button
-              onClick={() => handleResponseClick("blessings")}
-              style={styles.buttonBlessings}
-            >
+            <button onClick={() => handleResponseClick("blessings")} style={styles.buttonBlessings}>
               <div style={styles.buttonIcon}>🙏</div>
               <div style={styles.buttonText}>Send blessings</div>
             </button>
@@ -136,9 +132,11 @@ export default function RSVPWidget({ eventId, eventName }: RSVPWidgetProps) {
             <p style={styles.selectedText}>
               You selected:{" "}
               <span style={styles.selectedEmphasis}>
-                {response === "confirmed" ? "I'll be there!" : 
-                 response === "maybe" ? "Maybe" : 
-                 "Send blessings"}
+                {response === "confirmed"
+                  ? "I'll be there!"
+                  : response === "maybe"
+                  ? "Maybe"
+                  : "Send blessings"}
               </span>
             </p>
           </div>
@@ -234,7 +232,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 22,
     fontWeight: 700,
     color: "#d4af37",
-    textAlign: "center" as const,
+    textAlign: "center",
     marginBottom: 24,
     marginTop: 0,
     fontStyle: "italic",
@@ -277,44 +275,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     fontSize: 14,
   },
-  buttonIcon: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  buttonText: {
-    fontSize: 14,
-    fontWeight: 700,
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 16,
-  },
+  buttonIcon: { fontSize: 36, marginBottom: 8 },
+  buttonText: { fontSize: 14, fontWeight: 700 },
+  form: { display: "flex", flexDirection: "column", gap: 16 },
   selectedBadge: {
     background: "rgba(212,175,55,0.15)",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
   },
-  selectedText: {
-    color: "#b8956f",
-    fontSize: 14,
-    margin: 0,
-  },
-  selectedEmphasis: {
-    color: "#d4af37",
-    fontWeight: 700,
-  },
-  formGroup: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#b8956f",
-  },
+  selectedText: { color: "#b8956f", fontSize: 14, margin: 0 },
+  selectedEmphasis: { color: "#d4af37", fontWeight: 700 },
+  formGroup: { display: "flex", flexDirection: "column", gap: 6 },
+  label: { fontSize: 13, fontWeight: 600, color: "#b8956f" },
   input: {
     padding: "12px 14px",
     borderRadius: 8,
@@ -325,11 +298,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     outline: "none",
   },
-  buttonRow: {
-    display: "flex",
-    gap: 12,
-    marginTop: 8,
-  },
+  buttonRow: { display: "flex", gap: 12, marginTop: 8 },
   backButton: {
     flex: 1,
     padding: "14px 24px",
@@ -359,12 +328,9 @@ const styles: Record<string, React.CSSProperties> = {
     border: "2px solid rgba(74,222,128,0.3)",
     borderRadius: 16,
     padding: 40,
-    textAlign: "center" as const,
+    textAlign: "center",
   },
-  confirmationIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
+  confirmationIcon: { fontSize: 64, marginBottom: 16 },
   confirmationTitle: {
     fontSize: 24,
     fontWeight: 800,
@@ -372,21 +338,12 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 12,
     marginTop: 0,
   },
-  confirmationText: {
-    fontSize: 16,
-    color: "#86efac",
-    marginBottom: 20,
-  },
+  confirmationText: { fontSize: 16, color: "#86efac", marginBottom: 20 },
   confirmationBadge: {
     display: "inline-block",
     background: "rgba(74,222,128,0.15)",
     borderRadius: 8,
     padding: "10px 24px",
   },
-  confirmationBadgeText: {
-    color: "#4ade80",
-    fontWeight: 700,
-    fontSize: 15,
-    margin: 0,
-  },
+  confirmationBadgeText: { color: "#4ade80", fontWeight: 700, fontSize: 15, margin: 0 },
 };
